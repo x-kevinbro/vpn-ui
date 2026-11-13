@@ -42,7 +42,20 @@ hr()   { printf '%s%s%s\n' "$D" "$(printf '%.0s-' {1..60})" "$R"; }
 
 # The panel binary this menu drives. VPNUI_BIN overrides it for a non-default
 # install; deploy.sh exports it so the menu follows deploy.sh's own DEST.
-BIN="${VPNUI_BIN:-/opt/vpn-ui/vpn-ui-amd64}"
+# Default to the binary for THIS CPU (the fork ships vpn-ui-arm64 too), falling
+# back to whichever one is actually installed. Upstream assumed amd64.
+if [[ -z "${VPNUI_BIN:-}" ]]; then
+    case "$(uname -m)" in
+        aarch64|arm64) VPNUI_BIN=/opt/vpn-ui/vpn-ui-arm64 ;;
+        *)             VPNUI_BIN=/opt/vpn-ui/vpn-ui-amd64 ;;
+    esac
+    if [[ ! -x "$VPNUI_BIN" ]]; then
+        for _cand in /opt/vpn-ui/vpn-ui-arm64 /opt/vpn-ui/vpn-ui-amd64; do
+            [[ -x "$_cand" ]] && { VPNUI_BIN="$_cand"; break; }
+        done
+    fi
+fi
+BIN="$VPNUI_BIN"
 # Every value below is preserved when already set, because deploy.sh sources this
 # file with its own: sourcing must add the shared function, never quietly redefine
 # the caller's configuration.

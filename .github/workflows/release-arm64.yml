@@ -1,0 +1,66 @@
+# Build and publish the arm64 vpn-ui binary as a release asset, so the installer
+# has a vpn-ui-arm64 to download (upstream ships amd64 only). Runs on GitHub's
+# native arm64 runner, so the cgo/sqlite build and the Docker daemon bundle are
+# built for aarch64 without emulation.
+name: release-arm64
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag to attach the arm64 asset to (e.g. v1.9.4-arm64). Created if absent."
+        required: true
+  push:
+    tags:
+      - "*-arm64"
+
+permissions:
+  contents: write
+
+jobs:
+  build-arm64:
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - name: Check out the fork with submodules
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Install Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: "1.23"
+
+      - name: Install build prerequisites
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y build-essential pkg-config file git wget
+          # Docker is preinstalled on GitHub runners; confirm it is usable for the
+          # daemon-bundle step, which builds inside alpine/rust containers.
+          docker version
+
+      - name: Build vpn-ui for arm64
+        run: |
+          chmod +x build.sh
+          ./build.sh --arch arm64
+          test -f build/out/vpn-ui-arm64
+
+      - name: Rename asset for the installer
+        run: cp build/out/vpn-ui-arm64 vpn-ui-arm64
+
+      - name: Resolve the release tag
+        id: tag
+        run: |
+          if [ "${{ github.event_name }}" = "push" ]; then
+            echo "tag=${GITHUB_REF_NAME}" >> "$GITHUB_OUTPUT"
+          else
+            echo "tag=${{ github.event.inputs.tag }}" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Publish the arm64 asset to a release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.tag.outputs.tag }}
+          name: ${{ steps.tag.outputs.tag }}
+          files: vpn-ui-arm64
+          fail_on_unmatched_files: true

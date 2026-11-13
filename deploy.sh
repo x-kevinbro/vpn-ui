@@ -2,8 +2,15 @@
 # MmD
 set -euo pipefail
 
-REPO="Sir-MmD/vpn-ui"
-ASSET="vpn-ui-amd64"
+# Fork that also publishes an arm64 build (upstream Sir-MmD ships amd64 only).
+REPO="${VPNUI_REPO:-x-kevinbro/vpn-ui}"
+# Pick the release asset for this CPU. Upstream hardcoded amd64, which installed
+# a binary that cannot execute on aarch64 hosts (Oracle Ampere, Graviton, Pi).
+case "$(uname -m)" in
+    x86_64|amd64)   ASSET="vpn-ui-amd64" ;;
+    aarch64|arm64)  ASSET="vpn-ui-arm64" ;;
+    *)              ASSET="vpn-ui-amd64" ;;
+esac
 DEST_DIR="/opt/vpn-ui"
 DEST="$DEST_DIR/$ASSET"
 # The DEFAULT systemd unit name, and ONLY a fallback. The operator can rename the
@@ -99,8 +106,10 @@ hr
 command -v systemctl >/dev/null 2>&1 || die "systemctl not found — this host isn't running systemd."
 
 arch="$(uname -m)"
-[[ "$arch" == "x86_64" || "$arch" == "amd64" ]] || \
-    warn "host architecture is '$arch' — this installs the amd64 build, which may not run here."
+case "$arch" in
+    x86_64|amd64|aarch64|arm64) ;;
+    *) warn "host architecture is '$arch' — no build for it; falling back to amd64, which may not run here." ;;
+esac
 
 # Fresh install vs in-place update: an already-installed binary means UPDATE. On
 # update we must NOT re-randomize credentials (that would lock the operator out of
